@@ -35,6 +35,7 @@ void Game::mainLoop() {
       std::vector<std::vector<torch::Tensor>> feat;
       std::vector<std::vector<torch::Tensor>> pi;
       std::vector<std::vector<torch::Tensor>> piMask;
+      std::vector<std::vector<torch::Tensor>> moveHist;
       size_t stepindex;
       std::chrono::system_clock::time_point start;
       std::vector<int> resignCounter;
@@ -66,6 +67,7 @@ void Game::mainLoop() {
       gst.feat.resize(players_.size());
       gst.pi.resize(players_.size());
       gst.piMask.resize(players_.size());
+      gst.moveHist.resize(players_.size());
       gst.stepindex = 0;
       gst.start = std::chrono::system_clock::now();
       gst.resignCounter.resize(players_.size());
@@ -155,6 +157,10 @@ void Game::mainLoop() {
             for (auto& v : i->pi[p]) {
               pi_[p].pushBack(v);
             }
+
+            for (auto& v : i->moveHist[p]) {
+              actionHistory_[p].pushBack(v);
+            }
             //            if (mctsPlayers[p]->isTournamentOpponent()) {
             //              for (auto& v : i->piMask[p]) {
             //                v.zero_();
@@ -220,6 +226,7 @@ void Game::mainLoop() {
               torch::Tensor feat = getFeatureInTensor(*state);
               auto [policy, policyMask] =
                   getPolicyInTensor(*state, result.at(offset + i).mctsPolicy);
+              torch::Tensor moveHist = getMoveHistoryInTensor(*state);
 
               auto& gameState = actGameStates.at(currentPlayerIndex).at(i);
               if (gameState->canResign) {
@@ -241,6 +248,7 @@ void Game::mainLoop() {
               gameState->feat.at(currentPlayerIndex).push_back(feat);
               gameState->pi.at(currentPlayerIndex).push_back(policy);
               gameState->piMask.at(currentPlayerIndex).push_back(policyMask);
+              gameState->moveHist.at(currentPlayerIndex).push_back(moveHist);
 
               state->forward(result.at(offset + i).bestAction);
 
@@ -537,9 +545,11 @@ void Game::step() {
     if (!evalMode) {
       torch::Tensor feat = getFeatureInTensor(*state_);
       auto [policy, policyMask] = getPolicyInTensor(*state_, result.mctsPolicy);
+      torch::Tensor moveHist = getMoveHistoryInTensor(*state_);
       feature_[playerIdx].pushBack(std::move(feat));
       pi_[playerIdx].pushBack(std::move(policy));
       piMask_[playerIdx].pushBack(std::move(policyMask));
+      actionHistory_[playerIdx].pushBack(std::move(moveHist));
     }
 
     // std::cout << ">>>>actual act" << std::endl;
@@ -620,12 +630,14 @@ bool Game::prepareForSend(int playerId) {
     bool sendPi = pi_[playerId].prepareForSend();
     bool sendPiMask = piMask_[playerId].prepareForSend();
     bool sendV = v_[playerId].prepareForSend();
+    bool sendHis = actionHistory_[playerId].prepareForSend();
     assert(sendPi && sendV && sendPiMask);
     return true;
   }
   bool sendPi = pi_[playerId].prepareForSend();
   bool sendPiMask = piMask_[playerId].prepareForSend();
   bool sendV = v_[playerId].prepareForSend();
+  bool sendHis = actionHistory_[playerId].prepareForSend();
   assert((!sendPi) && (!sendV) && (!sendPiMask));
   return false;
 }

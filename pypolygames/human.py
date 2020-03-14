@@ -167,7 +167,6 @@ def _play_game_against_neural_mcts(
         batch = dcm.get_input(max_timeout_s=1)
         if len(batch) == 0:
             continue
-
         assert len(batch) == 1
 
         # split in as many part as there are devices

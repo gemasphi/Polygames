@@ -115,3 +115,4 @@ class MultiCounter:
 
             if self.tb_writer is not None:
                 self.tb_writer.add_scalar(k, v.mean(), global_counter)
+                self.tb_writer.flush()

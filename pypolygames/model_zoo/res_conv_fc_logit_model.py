@@ -207,4 +207,4 @@ class ResConvFCLogitModel(torch.jit.ScriptModule):
 
         stat["v_err"].feed(v_err.detach().mean().item())
         stat["pi_err"].feed(pi_err.detach().mean().item())
-        return err.mean()
+        return err.mean(), pred_logit, pred_v 

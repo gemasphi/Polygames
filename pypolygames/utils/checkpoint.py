@@ -10,9 +10,8 @@ import zipfile
 import re
 from pathlib import Path
 from typing import Iterator, Dict, Union, Any
-
+import os
 import torch
-
 import tube
 
 from .command_history import CommandHistory
@@ -75,9 +74,9 @@ def save_checkpoint(
         # with zipfile.ZipFile(Path(checkpoint_dir) / f"{checkpoint_name}.zip", "w", allowZip64=True) as z:
         #    with z.open(f"{checkpoint_name}.pt", "w", force_zip64=True) as f:
         #        torch.save(checkpoint, f)
-        with gzip.open(checkpoint_dir / f"{checkpoint_name}.pt.gz", "wb") as f:
+        with gzip.open(checkpoint_dir / f"temp_{checkpoint_name}.pt.gz", "wb") as f:
             torch.save(checkpoint, f)
-
+        os.rename(checkpoint_dir / f"temp_{checkpoint_name}.pt.gz", checkpoint_dir / f"{checkpoint_name}.pt.gz")
 
 def load_checkpoint(checkpoint_path: Path) -> Checkpoint:
     ext = checkpoint_path.suffix

@@ -11,6 +11,12 @@
 
 #include "state.h"
 
+
+inline torch::Tensor getMoveHistoryInTensor(const State& state) {
+  auto& history = state.GetMoveHistory();
+  return torch::tensor(history);
+}
+
 inline void getFeatureInTensor(const State& state, float* dest) {
   auto& feat = state.GetFeatures();
   memcpy(dest, feat.data(), sizeof(float) * feat.size());

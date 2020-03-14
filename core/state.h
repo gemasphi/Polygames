@@ -214,7 +214,9 @@ class State : public mcts::State {
     assert(action != mcts::InvalidAction);
     _moves.push_back(action);
     _moveRngs.emplace_back(_rng, forcedDice);
-    ApplyAction(*GetLegalActions().at(action));
+    auto legal_action = *GetLegalActions().at(action);
+    _moveHistory.push_back(legal_action);
+    ApplyAction(legal_action);
 
     // printCurrentBoard();
     // std::cout << "=========" << std::endl;
@@ -540,8 +542,23 @@ class State : public mcts::State {
     return _actionSize;
   }
 
+  const int64_t GetMoveHistorySize() const {
+    return 42;
+  }
+
+  const std::vector<int> GetMoveHistory() const {
+    std::vector<int> moveHistory(GetMoveHistorySize());
+
+    for (size_t i = 0; i < _moveHistory.size(); i++) {
+      moveHistory[i] = _moveHistory[i].GetX() + 1;
+    }
+
+    return moveHistory;
+  }
+
   void reset() {
     _moves.clear();
+    _moveHistory.clear();
     _moveRngs.clear();
     _previousFeatures.clear();
     _previousFeaturesOffset = 0;
@@ -577,6 +594,7 @@ class State : public mcts::State {
   std::vector<int64_t> _actionSize;  // size of the neural network output
 
   std::vector<mcts::Action> _moves;
+  std::vector<_Action> _moveHistory;
   std::vector<std::pair<std::minstd_rand, int>> _moveRngs;
 
   // Data specifying the way we generate generic features.

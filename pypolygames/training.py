@@ -24,7 +24,6 @@ from .params import (
 )
 from . import utils
 from .env_creation_helpers import create_model, create_game, create_player
-
 #######################################################################################
 # OPTIMIZER CREATION
 #######################################################################################
@@ -260,7 +259,46 @@ class DDPWrapperForModel(nn.Module):
             raise RuntimeError("DDPWrapperForModel: return_logit is false")
         return self.module.forward(x)
 
+class PerfectPlayerWrapper:
+  def __init__(self):
+    sys.path.append("/home/gemas/connect4")
+    from PerfectPlayer import PerfectPlayer
+    self.perfect_player = PerfectPlayer("/home/gemas/connect4/7x6.book")
+
+  def _value_error(self, v, p_v):
+    return nn.functional.mse_loss(p_v, v, reduction="none").squeeze(1)
+
+  def _policy_error(self, pred_logit, p_pi):
+    pred_log_pi = nn.functional.log_softmax(pred_logit.flatten(1), dim=1).view_as(pred_logit)
+    return -(pred_log_pi * p_pi).sum(1)
+
+  def loss(
+    self, 
+    move_history: torch.Tensor,
+    pred_pi: torch.Tensor,
+    pred_v: torch.Tensor,
+    mcts_pi: torch.Tensor,
+    mcts_v: torch.Tensor,
+    stat: utils.MultiCounter
+    ) -> None:
+    _, perfect_v, perfect_pi = self.perfect_player.get_position_scores(move_history.numpy())
+    perfect_v, perfect_pi = torch.from_numpy(perfect_v).float(), torch.from_numpy(perfect_pi).float() 
+
+    #Perfect Player vs NN
+    v_err = self._value_error(pred_v, perfect_v)
+    pi_err = self._policy_error(pred_pi, perfect_pi) 
+    stat["nn_pp_v_err"].feed(v_err.detach().mean().item())
+    stat["nn_pp_pi_err"].feed(pi_err.detach().mean().item())
+
+    #Perfect Player vs MCTS
+    v_err = self._value_error(mcts_v, perfect_v)
+    pi_err = self._policy_error(mcts_pi, perfect_pi) 
+    stat["mcts_pp_v_err"].feed(v_err.detach().mean().item())
+    stat["mcts_pp_pi_err"].feed(pi_err.detach().mean().item())
+
+
 _train_epoch_waiting_time = 0
+_perfect_player = PerfectPlayerWrapper() 
 def _train_epoch(
     train_device: torch.device,
     model: torch.jit.ScriptModule,
@@ -274,6 +312,7 @@ def _train_epoch(
     sync_period: int,
 ) -> None:
     global _train_epoch_waiting_time
+    global _perfect_player
     pre_num_add = assembler.buffer_num_add()
     pre_num_sample = assembler.buffer_num_sample()
     sync_s = 0.
@@ -284,7 +323,8 @@ def _train_epoch(
     for eid in range(optim_params.epoch_len):
         batch = assembler.sample(optim_params.batchsize)
         batch = utils.to_device(batch, train_device)
-        loss = model.loss(lossmodel, batch["s"], batch["v"], batch["pi"], batch["pi_mask"], stat)
+        loss, pred_logit, pred_v = model.loss(lossmodel, batch["s"], batch["v"], batch["pi"], batch["pi_mask"], stat)
+        _perfect_player.loss(batch['m_h'], pred_logit, pred_v, batch["pi"], batch["v"], stat)
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(model.parameters(), optim_params.grad_clip)
         optim.step()
