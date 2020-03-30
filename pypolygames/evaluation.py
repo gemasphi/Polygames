@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Iterator, Tuple, List, Callable, Optional, Dict
 
 import torch
-
+import copy
 import tube
 from pytube.data_channel_manager import DataChannelManager
 
@@ -63,28 +63,28 @@ def create_checkpoint_iter(eval_params: EvalParams, only_last: bool = False):
 #######################################################################################
 
 
-def create_models_and_devices_opponent(
-    eval_params: EvalParams
+def create_models_and_devices(
+    checkpoint: utils.Checkpoint,
+    devices: List[str]
 ) -> Tuple[List[torch.jit.ScriptModule], List[torch.device], GameParams]:
-    devices_opponent = [
-        torch.device(device_opponent) for device_opponent in eval_params.device_opponent
+    devices = [
+        torch.device(device) for device in devices
     ]
-    checkpoint_opponent = utils.load_checkpoint(eval_params.checkpoint_opponent)
-    model_state_dict_opponent = checkpoint_opponent["model_state_dict"]
-    game_params_opponent = checkpoint_opponent["game_params"]
-    sanitize_game_params(game_params_opponent)
-    model_params_opponent = checkpoint_opponent["model_params"]
-    models_opponent = []
-    for device_opponent in devices_opponent:
-        model_opponent = create_model(
-            game_params=game_params_opponent,
-            model_params=model_params_opponent,
+    model_state_dict = checkpoint["model_state_dict"]
+    game_params = checkpoint["game_params"]
+    sanitize_game_params(game_params)
+    model_params = checkpoint["model_params"]
+    models = []
+    for device in devices:
+        model = create_model(
+            game_params=game_params,
+            model_params=model_params,
             resume_training=False,
-        ).to(device_opponent)
-        model_opponent.load_state_dict(model_state_dict_opponent)
-        model_opponent.eval()
-        models_opponent.append(model_opponent)
-    return models_opponent, devices_opponent, game_params_opponent
+        ).to(device)
+        model.load_state_dict(model_state_dict)
+        model.eval()
+        models.append(model)
+    return models, devices, game_params
 
 
 #######################################################################################
@@ -316,21 +316,26 @@ def evaluate_on_checkpoint(
     pure_mcts_opponent: bool,
 ) -> utils.Result:
     if eval_params.eval_verbosity:
+        checkpoint_epoch = eval_params.checkpoint_epoch if hasattr(eval_params,"checkpoint_epoch") else None
         print(f"Playing {eval_params.num_game_eval} games of {game_params.game_name}:")
         print(
             f"- {'pure MCTS' if pure_mcts_eval else type(models_eval[0]).__name__} "
+            f"{checkpoint_epoch if checkpoint_epoch else  ''} "
             f"player uses "
             f"{eval_params.num_rollouts_eval} rollouts per actor "
             f"with {eval_params.num_actor_eval} "
             f"actor{'s' if eval_params.num_actor_eval > 1 else ''}"
         )
+        checkpoint_epoch_opp = eval_params.checkpoint_epoch_opp if hasattr(eval_params,"checkpoint_epoch_opp") else None
         print(
             f"- {'pure MCTS' if pure_mcts_opponent else type(models_opponent[0]).__name__} "
+            f"{checkpoint_epoch_opp if checkpoint_epoch_opp  else  ''} "
             f"opponent uses "
             f"{eval_params.num_rollouts_opponent} rollouts per actor "
             f"with {eval_params.num_actor_opponent} "
             f"actor{'s' if eval_params.num_actor_opponent > 1 else ''}"
         )
+
     if pure_mcts_eval:
         pass  # not implemented
     else:
@@ -360,7 +365,59 @@ def evaluate_on_checkpoint(
 #######################################################################################
 # OVERALL EVALUATION WORKFLOW
 #######################################################################################
+def evaluate_games(
+            game_params, 
+            eval_params, 
+            seed_generator, 
+            pure_mcts_eval, 
+            pure_mcts_opponent, 
+            models_eval, 
+            devices_eval, 
+            devices_opponent, 
+            models_opponent, 
+            ):
+    num_evaluated_games = 0
+    rewards = []
 
+    eval_batch_size = eval_params.num_parallel_games_eval if eval_params.num_parallel_games_eval else eval_params.num_game_eval
+    print("evaluating {} games with batches of size {}".format(eval_params.num_game_eval, eval_batch_size))
+    while num_evaluated_games < eval_params.num_game_eval:
+        if eval_params.eval_verbosity:
+            print("creating evaluation environment...")
+        current_batch_size = min(eval_batch_size, eval_params.num_game_eval - num_evaluated_games)
+        (
+            context,
+            actor_channel_eval,
+            actor_channel_opponent,
+            get_eval_reward,
+        ) = create_evaluation_environment(
+            seed_generator=seed_generator,
+            game_params=game_params,
+            eval_params=eval_params,
+            current_batch_size=current_batch_size,
+            pure_mcts_eval=pure_mcts_eval,
+            pure_mcts_opponent=pure_mcts_opponent,
+            num_evaluated_games=num_evaluated_games,
+        )
+        if eval_params.eval_verbosity:
+            print("evaluating...")
+        partial_result = evaluate_on_checkpoint(
+            game_params=game_params,
+            eval_params=eval_params,
+            context=context,
+            actor_channel_eval=actor_channel_eval,
+            actor_channel_opponent=actor_channel_opponent,
+            get_eval_reward=get_eval_reward,
+            devices_eval=devices_eval,
+            models_eval=models_eval,
+            pure_mcts_eval=pure_mcts_eval,
+            devices_opponent=devices_opponent,
+            models_opponent=models_opponent,
+            pure_mcts_opponent=pure_mcts_opponent,
+        )
+        num_evaluated_games += current_batch_size
+        rewards += partial_result.reward
+    return rewards, num_evaluated_games
 
 def run_evaluation(eval_params: EvalParams, only_last: bool = False) -> None:
     start_time = time.time()
@@ -400,11 +457,15 @@ def run_evaluation(eval_params: EvalParams, only_last: bool = False) -> None:
             models_opponent,
             devices_opponent,
             game_params_opponent,
-        ) = create_models_and_devices_opponent(eval_params=eval_params)
+        ) = create_models_and_devices(
+            checkpoint=utils.load_checkpoint(eval_params.checkpoint_opponent),
+            devices=eval_params.device_opponent
+            )
 
     results = []
     first_checkpoint = False
     game_params = None
+    last_checkpoint = None
     for checkpoint in checkpoint_iter:
         epoch = checkpoint.get("epoch", 0)  # 0 when checkpoint_dir is None
         model_state_dict_eval = checkpoint["model_state_dict"]
@@ -446,50 +507,20 @@ def run_evaluation(eval_params: EvalParams, only_last: bool = False) -> None:
             model_eval.load_state_dict(model_state_dict_eval)
             model_eval.eval()
 
-        num_evaluated_games = 0
-        rewards = []
-
-        eval_batch_size = eval_params.num_parallel_games_eval if eval_params.num_parallel_games_eval else eval_params.num_game_eval
-        print("evaluating {} games with batches of size {}".format(eval_params.num_game_eval, eval_batch_size))
-        while num_evaluated_games < eval_params.num_game_eval:
-            if eval_params.eval_verbosity:
-                print("creating evaluation environment...")
-            current_batch_size = min(eval_batch_size, eval_params.num_game_eval - num_evaluated_games)
-            (
-                context,
-                actor_channel_eval,
-                actor_channel_opponent,
-                get_eval_reward,
-            ) = create_evaluation_environment(
-                seed_generator=seed_generator,
-                game_params=game_params,
-                eval_params=eval_params,
-                current_batch_size=current_batch_size,
-                pure_mcts_eval=pure_mcts_eval,
-                pure_mcts_opponent=pure_mcts_opponent,
-                num_evaluated_games=num_evaluated_games,
+        rewards, num_evaluated_games = evaluate_games(
+            game_params, 
+            eval_params, 
+            seed_generator, 
+            pure_mcts_eval, 
+            pure_mcts_opponent, 
+            models_eval, 
+            devices_eval, 
+            devices_opponent, 
+            models_opponent
             )
-            if eval_params.eval_verbosity:
-                print("evaluating...")
-            partial_result = evaluate_on_checkpoint(
-                game_params=game_params,
-                eval_params=eval_params,
-                context=context,
-                actor_channel_eval=actor_channel_eval,
-                actor_channel_opponent=actor_channel_opponent,
-                get_eval_reward=get_eval_reward,
-                devices_eval=devices_eval,
-                models_eval=models_eval,
-                pure_mcts_eval=pure_mcts_eval,
-                devices_opponent=devices_opponent,
-                models_opponent=models_opponent,
-                pure_mcts_opponent=pure_mcts_opponent,
-            )
-            num_evaluated_games += current_batch_size
-            rewards += partial_result.reward
-            elapsed_time = time.time() - start_time
-            print(f"Evaluated on {num_evaluated_games} games in : {elapsed_time} s")
 
+        elapsed_time = time.time() - start_time
+        print(f"Evaluated on {num_evaluated_games} games in : {elapsed_time} s")
         result = utils.Result(rewards)
         print("@@@eval: %s" % result.log())
         results.append((epoch, result))
@@ -498,6 +529,40 @@ def run_evaluation(eval_params: EvalParams, only_last: bool = False) -> None:
             print("plotting...")
             plotter.plot_results(results)
             plotter.save()
+
+        evalute_with_previous_checkpoint = True
+        if evalute_with_previous_checkpoint and last_checkpoint != None:
+            (
+                models_opponent,
+                devices_opponent,
+                game_params_opponent,
+            ) = create_models_and_devices(
+                checkpoint=last_checkpoint,
+                devices=eval_params.device_eval
+                )
+
+            eval_params_pv = copy.deepcopy(eval_params) 
+            eval_params_pv.checkpoint_epoch = checkpoint["epoch"]
+            eval_params_pv.checkpoint_epoch_opp = last_checkpoint["epoch"]
+            eval_params_pv.num_rollouts_opponent = eval_params_pv.num_rollouts_eval 
+            rewards, num_evaluated_games = evaluate_games(
+                game_params, 
+                eval_params_pv, 
+                seed_generator, 
+                pure_mcts_eval, 
+                False, 
+                models_eval, 
+                devices_eval, 
+                devices_opponent, 
+                models_opponent
+            )
+
+            elapsed_time = time.time() - start_time
+            print(f"Evaluated on {num_evaluated_games} games in : {elapsed_time} s")
+            result = utils.Result(rewards)
+            print("@@@eval: %s" % result.log())
+
+        last_checkpoint = checkpoint
 
     elapsed_time = time.time() - start_time
     print(f"total time: {elapsed_time} s")

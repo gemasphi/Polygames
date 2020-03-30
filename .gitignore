@@ -361,6 +361,7 @@ cmake-build-debug/
 
 # Experiment directory
 exps/
+checkpoints/
 
 # For some people testing
 run.sh

@@ -175,15 +175,17 @@ class GenericModel(torch.jit.ScriptModule):
         pi_logit1 = F.relu(self.pi1(h4.flatten(1)))
         pi_logit2 = F.relu(self.pi2(pi_logit1))
         pi_logit = self.pi3(pi_logit2)
-        if return_logit:
-            return v, pi_logit
         s = pi_logit.shape
         pi = F.softmax(pi_logit.flatten(1), 1).reshape(s)
-        return v, pi
+
+        if return_logit:
+            return v, pi_logit, pi
+        
+        return v, pi, pi_logit
 
     @torch.jit.script_method
     def forward(self, x: torch.Tensor):
-        v, pi = self._forward(x, False)
+        v, pi, _ = self._forward(x, False)
         pi = pi.view(-1, self.c_prime, self.h_prime, self.w_prime)
         reply = {"v": v, "pi": pi}
         return reply
@@ -198,13 +200,12 @@ class GenericModel(torch.jit.ScriptModule):
         stat: utils.MultiCounter,
     ) -> float:
         pi = pi.flatten(1)
-        pred_v, pred_logit = model._forward(x, return_logit=True)
+        pred_v, pred_logit, pred_pi = model._forward(x, return_logit=True)
         utils.assert_eq(v.size(), pred_v.size())
         utils.assert_eq(pred_logit.size(), pi.size())
         utils.assert_eq(pred_logit.dim(), 2)
 
         pred_logit = pred_logit * pi_mask.view(pred_logit.shape)
-
         v_err = F.mse_loss(pred_v, v, reduction="none").squeeze(1)
         pred_log_pi = nn.functional.log_softmax(pred_logit.flatten(1), dim=1).view_as(
             pred_logit
@@ -217,4 +218,4 @@ class GenericModel(torch.jit.ScriptModule):
         stat["v_err"].feed(v_err.detach().mean().item())
         stat["pi_err"].feed(pi_err.detach().mean().item())
 
-        return err.mean(), pred_logit, pred_v 
+        return err.mean(), pred_pi, pred_v 

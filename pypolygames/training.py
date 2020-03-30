@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from dataclasses import asdict
 from typing import Iterator, Tuple, Callable, List, Optional
-
+import math
 import torch
 from torch import nn
 
@@ -268,9 +268,17 @@ class PerfectPlayerWrapper:
   def _value_error(self, v, p_v):
     return nn.functional.mse_loss(p_v, v, reduction="none").squeeze(1)
 
-  def _policy_error(self, pred_logit, p_pi):
+
+  def _logit_policy_error(self, pred_logit, p_pi):
     pred_log_pi = nn.functional.log_softmax(pred_logit.flatten(1), dim=1).view_as(pred_logit)
-    return -(pred_log_pi * p_pi).sum(1)
+    return torch.nn.KLDivLoss(reduction="batchmean")(pred_log_pi,p_pi)
+  
+  def _policy_error(self, pred_logit, p_pi):
+    error =  torch.nn.KLDivLoss(reduction="batchmean")((pred_logit + 0.0000001).log(),p_pi)
+    if math.isinf(error.detach().mean().item()):
+      breakpoint()
+
+    return error
 
   def loss(
     self, 
@@ -281,18 +289,17 @@ class PerfectPlayerWrapper:
     mcts_v: torch.Tensor,
     stat: utils.MultiCounter
     ) -> None:
-    _, perfect_v, perfect_pi = self.perfect_player.get_position_scores(move_history.numpy())
+    _, perfect_v, perfect_pi = self.perfect_player.get_position_scores(move_history.cpu().numpy())
     perfect_v, perfect_pi = torch.from_numpy(perfect_v).float(), torch.from_numpy(perfect_pi).float() 
-
     #Perfect Player vs NN
-    v_err = self._value_error(pred_v, perfect_v)
-    pi_err = self._policy_error(pred_pi, perfect_pi) 
+    v_err = self._value_error(pred_v.cpu(), perfect_v)
+    pi_err = self._policy_error(pred_pi.cpu(), perfect_pi) 
     stat["nn_pp_v_err"].feed(v_err.detach().mean().item())
     stat["nn_pp_pi_err"].feed(pi_err.detach().mean().item())
 
     #Perfect Player vs MCTS
-    v_err = self._value_error(mcts_v, perfect_v)
-    pi_err = self._policy_error(mcts_pi, perfect_pi) 
+    v_err = self._value_error(mcts_v.cpu(), perfect_v)
+    pi_err = self._policy_error(mcts_pi.view_as(perfect_pi).cpu(), perfect_pi) 
     stat["mcts_pp_v_err"].feed(v_err.detach().mean().item())
     stat["mcts_pp_pi_err"].feed(pi_err.detach().mean().item())
 
@@ -323,8 +330,8 @@ def _train_epoch(
     for eid in range(optim_params.epoch_len):
         batch = assembler.sample(optim_params.batchsize)
         batch = utils.to_device(batch, train_device)
-        loss, pred_logit, pred_v = model.loss(lossmodel, batch["s"], batch["v"], batch["pi"], batch["pi_mask"], stat)
-        _perfect_player.loss(batch['m_h'], pred_logit, pred_v, batch["pi"], batch["v"], stat)
+        loss, pred_pi, pred_v = model.loss(lossmodel, batch["s"], batch["v"], batch["pi"], batch["pi_mask"], stat)
+        _perfect_player.loss(batch['m_h'], pred_pi, pred_v, batch["pi"], batch["v"], stat)
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(model.parameters(), optim_params.grad_clip)
         optim.step()

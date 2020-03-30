@@ -90,7 +90,7 @@ def _set_mcts_option(
     # TODO: put hardcoded value in conf file
     mcts_option = mcts.MctsOption()
     mcts_option.use_mcts = True
-    mcts_option.puct = 1
+    mcts_option.puct = 2.5
     mcts_option.sample_before_step_idx = 2 if human_mode else 32
     mcts_option.num_rollout_per_thread = num_rollouts
     mcts_option.seed = seed
@@ -128,7 +128,7 @@ def _create_neural_mcts_player(
             game.get_feat_size(),
             game.get_action_size(),
             True,
-            True,
+            True, #TODO: THIS = TRUE
             assembler,
         )
         player.add_actor(actor)
@@ -154,6 +154,13 @@ def create_player(
         time_ratio=time_ratio,
         total_time=total_time,
     )
+    #TODO: reove this afterwards
+    """
+    res = 1
+    for dim in game.get_action_size():
+        res*=dim 
+    mcts_option.puct = res
+    """
     if pure_mcts:
         return _create_pure_mcts_player(
             game=game, mcts_option=mcts_option, num_actor=num_actor
