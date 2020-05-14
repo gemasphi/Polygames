@@ -6,11 +6,9 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-
 from . import utils as zutils
 from ..params import GameParams, ModelParams
 from .. import utils
-
 
 @zutils.register_model
 class GenericModel(torch.jit.ScriptModule):
