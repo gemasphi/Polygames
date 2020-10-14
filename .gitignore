@@ -1,6 +1,7 @@
 # Created by https://www.gitignore.io/api/vim,c++,cmake,linux,macos,python,intellij,sublimetext
 # Edit at https://www.gitignore.io/?templates=vim,c++,cmake,linux,macos,python,intellij,sublimetext
 
+wandb
 ### C++ ###
 # Prerequisites
 *.d

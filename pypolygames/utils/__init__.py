@@ -10,6 +10,6 @@ from .plotter import Plotter
 from .multi_counter import MultiCounter
 from .helpers import *
 from .assert_utils import assert_eq
-from .result import Result
+from .result import Result, parse_reward
 from .restrack import get_res_usage_str
 from . import listings

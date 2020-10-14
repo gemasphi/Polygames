@@ -531,11 +531,11 @@ class EvalParams:
     real_time: bool = False
     checkpoint_dir: Path = None
     checkpoint: Path = None
-    device_eval: List[str] = field(default_factory=lambda: ["cuda:1"])
-    num_game_eval: int = 100
+    device_eval: List[str] = field(default_factory=lambda: ["cuda:0"])
+    num_game_eval: int = 10
     num_parallel_games_eval: int = None
     num_actor_eval: int = 1
-    num_rollouts_eval: int = 400
+    num_rollouts_eval: int = 5
     checkpoint_opponent: Path = None
     device_opponent: List[str] = field(default_factory=lambda: ["cuda:0"])
     num_actor_opponent: int = 1

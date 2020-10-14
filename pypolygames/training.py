@@ -453,7 +453,9 @@ def run_training(
     optim_params: OptimParams,
     simulation_params: SimulationParams,
     execution_params: ExecutionParams,
+    run_group = "Default Group"
 ) -> None:
+    wandb.init(project="thesis-az", group=run_group)
     start_time = time.time()
     logger_path = os.path.join(execution_params.checkpoint_dir, "train.log")
     sys.stdout = utils.Logger(logger_path)

@@ -341,10 +341,10 @@ def run_training_and_evaluation_from_args(args: argparse.Namespace):
     args.checkpoint_dir = execution_params.checkpoint_dir
     eval_params = instanciate_params_from_args(EvalParams, args)
 
-    wandb.init(project="thesis-az")
-
+    
+    run_group = wandb.util.generate_id()
     if args.real_time:
-        eval_process = Process(target=run_evaluation, args=(eval_params,))
+        eval_process = Process(target=run_evaluation, args=(eval_params, False, run_group))
         eval_process.start()
         run_training(
             command_history=command_history,
@@ -353,6 +353,7 @@ def run_training_and_evaluation_from_args(args: argparse.Namespace):
             optim_params=optim_params,
             simulation_params=simulation_params,
             execution_params=execution_params,
+            run_group= run_group
         )
         eval_process.join()
     else:
