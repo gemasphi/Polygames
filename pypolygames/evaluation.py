@@ -8,7 +8,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Iterator, Tuple, List, Callable, Optional, Dict
-
+import wandb
 import torch
 import copy
 import tube
@@ -521,6 +521,14 @@ def run_evaluation(eval_params: EvalParams, only_last: bool = False) -> None:
 
         elapsed_time = time.time() - start_time
         print(f"Evaluated on {num_evaluated_games} games in : {elapsed_time} s")
+        results = parse_reward(reward)
+        wandb.log({
+            "epoch_test": epoch,
+            "win_mcts": results["win"]/result["total"], 
+            "avg_mcts": results["avg"]/result["total"],
+            "tie_mcts": results["tie"]/result["total"],
+            })
+
         result = utils.Result(rewards)
         print("@@@eval: %s" % result.log())
         results.append((epoch, result))
@@ -530,7 +538,7 @@ def run_evaluation(eval_params: EvalParams, only_last: bool = False) -> None:
             plotter.plot_results(results)
             plotter.save()
 
-        evalute_with_previous_checkpoint = True
+        evalute_with_previous_checkpoint = False
         if evalute_with_previous_checkpoint and last_checkpoint != None:
             (
                 models_opponent,

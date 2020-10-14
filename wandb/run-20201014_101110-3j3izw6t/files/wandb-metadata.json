@@ -1,0 +1,35 @@
+{
+    "os": "Linux-4.19.0-11-amd64-x86_64-with-debian-10.6",
+    "python": "3.7.9",
+    "heartbeatAt": "2020-10-14T10:11:12.435200",
+    "startedAt": "2020-10-14T10:11:10.142582",
+    "docker": null,
+    "gpu": "Tesla K80",
+    "gpu_count": 1,
+    "cpu_count": 4,
+    "cuda": "10.0.130",
+    "args": [
+        "traineval",
+        "--act_batchsize=48",
+        "--num_game=48",
+        "--model_name=ResConvFCLogitModel",
+        "--game_name=TicTacToe--num_rollouts=200",
+        "--real_time",
+        "--saving_period=5",
+        "--device",
+        "cuda:0",
+        "--num_rollouts_opponent=200"
+    ],
+    "state": "running",
+    "codePath": "pypolygames/__main__.py",
+    "program": "/home/gemas/Polygames/pypolygames/__main__.py",
+    "git": {
+        "remote": "https://github.com/gemasphi/Polygames.git",
+        "commit": "cba6907ecbf3a1c431f1ce40ef8b504f56681f09"
+    },
+    "email": "google-dl-platform@googlegroups.com",
+    "root": "/home/gemas/Polygames",
+    "host": "drl-az.c.datastorm-1083.internal",
+    "username": "gemas",
+    "executable": "/home/gemas/miniconda3/envs/poly/bin/python"
+}

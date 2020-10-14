@@ -27,6 +27,7 @@ from .evaluation import run_evaluation
 from .human import run_human_played_game
 from .human import run_tp_played_game
 from .convert import convert_checkpoint
+import wandb
 
 DOC = """The python package `pypolygames` can be used in either of the following modes:
 
@@ -339,6 +340,9 @@ def run_training_and_evaluation_from_args(args: argparse.Namespace):
     )
     args.checkpoint_dir = execution_params.checkpoint_dir
     eval_params = instanciate_params_from_args(EvalParams, args)
+
+    wandb.init(project="thesis-az")
+
     if args.real_time:
         eval_process = Process(target=run_evaluation, args=(eval_params,))
         eval_process.start()

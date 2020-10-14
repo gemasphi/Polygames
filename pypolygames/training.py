@@ -12,6 +12,7 @@ from typing import Iterator, Tuple, Callable, List, Optional
 import math
 import torch
 from torch import nn
+import wandb
 
 import tube
 
@@ -305,7 +306,7 @@ class PerfectPlayerWrapper:
 
 
 _train_epoch_waiting_time = 0
-_perfect_player = PerfectPlayerWrapper() 
+#_perfect_player = PerfectPlayerWrapper() 
 def _train_epoch(
     train_device: torch.device,
     model: torch.jit.ScriptModule,
@@ -319,7 +320,7 @@ def _train_epoch(
     sync_period: int,
 ) -> None:
     global _train_epoch_waiting_time
-    global _perfect_player
+    #global _perfect_player
     pre_num_add = assembler.buffer_num_add()
     pre_num_sample = assembler.buffer_num_sample()
     sync_s = 0.
@@ -331,7 +332,7 @@ def _train_epoch(
         batch = assembler.sample(optim_params.batchsize)
         batch = utils.to_device(batch, train_device)
         loss, pred_pi, pred_v = model.loss(lossmodel, batch["s"], batch["v"], batch["pi"], batch["pi_mask"], stat)
-        _perfect_player.loss(batch['m_h'], pred_pi, pred_v, batch["pi"], batch["v"], stat)
+       # _perfect_player.loss(batch['m_h'], pred_pi, pred_v, batch["pi"], batch["v"], stat)
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(model.parameters(), optim_params.grad_clip)
         optim.step()
@@ -342,6 +343,7 @@ def _train_epoch(
             assembler.update_model(model.state_dict())
             sync_s += time.time() - sync_t0
             num_sync += 1
+
 
         stat["loss"].feed(loss.detach().item())
         stat["grad_norm"].feed(grad_norm)
@@ -360,6 +362,7 @@ def _train_epoch(
     print(f"syncing duration: {sync_s:2f}s for {num_sync} syncs ({int(100 * sync_s / time_elapsed)}% of train time)")
 
     stat.summary(epoch)
+    wandb.log({"epoch": epoch, "loss": stat["loss"].mean(), "grad_norm": stat["grad_norm"].mean()})
     stat.reset()
 
 def train_model(
