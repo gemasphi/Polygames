@@ -456,6 +456,15 @@ def run_training(
     run_group = "Default Group"
 ) -> None:
     wandb.init(project="thesis-az", group=run_group)
+    cfg = {
+      **asdict(game_params),
+      **asdict(model_params),
+      **asdict(optim_params),
+      **asdict(simulation_params),
+      **asdict(execution_params),
+    }
+
+    wandb.config.update(cfg) 
     start_time = time.time()
     logger_path = os.path.join(execution_params.checkpoint_dir, "train.log")
     sys.stdout = utils.Logger(logger_path)

@@ -290,7 +290,7 @@ class OptimParams:
 class SimulationParams:
     num_game: int = 10  # number of cores
     num_actor: int = 1  # should be 1 at training time
-    num_rollouts: int = 1600
+    num_rollouts: int = 400
     replay_capacity: int = 1_000_000
     replay_warmup: int = 10_000
     sync_period: int = 100
@@ -395,7 +395,7 @@ class ExecutionParams:
     human_first: bool = False
     time_ratio: float = 0.07
     total_time: float = 0
-    device: List[str] = field(default_factory=lambda: ["cuda:0"])
+    device: List[str] = field(default_factory=lambda: ["cpu"])
     seed: int = 1
     ddp: bool = False
     server_listen_endpoint: str = ""
@@ -481,7 +481,7 @@ class ExecutionParams:
                     nargs="*",
                     help="List of torch devices where the computation for the model"
                     "will happen "
-                    '(e.g., "cpu", "cuda:0") '
+                    '(e.g., "cpu", "cpu") '
                     "- in training mode, if there are several devices in the list, "
                     " the first device will be the one used for training "
                     "while the others will be used generating games",
@@ -531,15 +531,15 @@ class EvalParams:
     real_time: bool = False
     checkpoint_dir: Path = None
     checkpoint: Path = None
-    device_eval: List[str] = field(default_factory=lambda: ["cuda:0"])
-    num_game_eval: int = 10
+    device_eval: List[str] = field(default_factory=lambda: ["cpu"])
+    num_game_eval: int = 200
     num_parallel_games_eval: int = None
     num_actor_eval: int = 1
-    num_rollouts_eval: int = 5
+    num_rollouts_eval: int = 100
     checkpoint_opponent: Path = None
-    device_opponent: List[str] = field(default_factory=lambda: ["cuda:0"])
+    device_opponent: List[str] = field(default_factory=lambda: ["cpu"])
     num_actor_opponent: int = 1
-    num_rollouts_opponent: int = 2000
+    num_rollouts_opponent: int = 200
     seed_eval: int = 2
     plot_enabled: bool = False
     plot_server: str = "http://localhost"
@@ -617,7 +617,7 @@ class EvalParams:
                     nargs="*",
                     help="List of torch devices where the computation for the model"
                     "to be tested will happen "
-                    '(e.g., "cpu", "cuda:0")',
+                    '(e.g., "cpu", "cpu")',
                 )
             ),
             num_game_eval=ArgFields(
@@ -661,7 +661,7 @@ class EvalParams:
                     nargs="*",
                     help="List of torch devices where the computation for the opponent"
                     "will happen "
-                    '(e.g., "cpu", "cuda:0")',
+                    '(e.g., "cpu", "cpu")',
                 )
             ),
             num_actor_opponent=ArgFields(

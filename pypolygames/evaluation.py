@@ -421,7 +421,13 @@ def evaluate_games(
 
 def run_evaluation(eval_params: EvalParams, only_last: bool = False, run_group = "Default Group") -> None:
     wandb.init(project="thesis-az", group=run_group)
-    print(run_group)
+    """
+    cfg = {
+      **asdict(EvalParams),
+    }
+
+    wandb.config.update(cfg) 
+    """
     start_time = time.time()
     logger_dir = eval_params.checkpoint_dir
     if eval_params.checkpoint_dir is None:
@@ -523,12 +529,12 @@ def run_evaluation(eval_params: EvalParams, only_last: bool = False, run_group =
 
         elapsed_time = time.time() - start_time
         print(f"Evaluated on {num_evaluated_games} games in : {elapsed_time} s")
-        results = utils.parse_reward(rewards)
+        parsed_results = utils.parse_reward(rewards)
         wandb.log({
             "epoch_test": epoch,
-            "win_mcts": results["win"]/results["total"], 
-            "avg_mcts": results["avg"]/results["total"],
-            "tie_mcts": results["tie"]/results["total"],
+            "win_mcts": parsed_results["win"]/parsed_results["total"], 
+            "avg_mcts": parsed_results["avg"]/parsed_results["total"],
+            "tie_mcts": parsed_results["tie"]/parsed_results["total"],
             })
 
         result = utils.Result(rewards)
